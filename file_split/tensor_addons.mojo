@@ -1,6 +1,8 @@
 from tensor import Tensor, TensorShape
 from utils.index import Index
 from algorithm import parallelize, vectorize
+from algorithm.reduction import sum
+from memory.buffer import Buffer
 
 alias nelts = simdwidthof[DType.float32]()
 
@@ -85,3 +87,22 @@ fn matmul_vectorized_working[type: DType](first_matrix: Tensor[type], second_mat
             for k in range(nelts*(o_m_cols//nelts), o_m_cols):
                 o_m.simd_store[1](i*o_m_cols+k, o_m.simd_load[1](i*o_m_cols+k) + f_m.simd_load[1](i*f_m.dim(1)+j) * s_m.simd_load[1](j*s_m.dim(1)+k))
     return o_m.reshape(TensorShape(o_m_rows, o_m_cols))
+
+
+fn sum_on_rows(dvalues: Tensor[DType.float32]) raises -> Tensor[DType.float32]:
+    var rows = dvalues.dim(0)
+    var cols = dvalues.dim(1)
+
+    var output_tensor = Tensor[DType.float32](rows, 1)
+    
+    for i in range(rows):
+        for j in range(0, nelts*(cols//nelts), nelts):
+            var sum_buffer = Buffer[DType.float32, nelts]()
+            print(sum_buffer.simd_load[nelts](0))
+            sum_buffer.simd_store[nelts](0, dvalues.simd_load[nelts](i*cols+j))
+            print('a')
+            print(sum(sum_buffer))
+            output_tensor.simd_store[1](i, sum(sum_buffer) + output_tensor.simd_load[1](i))
+        for k in range(nelts*(cols//nelts), cols):
+            output_tensor.simd_store[1](i, dvalues.simd_load[1](i*cols+k) + output_tensor.simd_load[1](i))
+    return output_tensor
